@@ -2,8 +2,10 @@ package com.booking.replication.pipeline.event.handler;
 
 import com.booking.replication.Coordinator;
 import com.booking.replication.Metrics;
+import com.booking.replication.applier.Applier;
 import com.booking.replication.applier.ApplierException;
 import com.booking.replication.applier.HBaseApplier;
+import com.booking.replication.applier.KafkaApplier;
 import com.booking.replication.applier.hbase.TaskBufferInconsistencyException;
 import com.booking.replication.augmenter.AugmentedSchemaChangeEvent;
 import com.booking.replication.binlog.EventPosition;
@@ -56,18 +58,20 @@ public class QueryEventHandler implements BinlogEventV4Handler {
         QueryEventType queryEventType = QueryInspector.getQueryEventType(event);
         LOGGER.debug("Applying event: " + event + ", type: " + queryEventType);
 
+        Applier applier = eventHandlerConfiguration.getApplier();
+
         switch (queryEventType) {
             case COMMIT:
                 commitQueryCounter.mark();
-                eventHandlerConfiguration.getApplier().applyCommitQueryEvent(event, currentTransaction);
+                applier.applyCommitQueryEvent(event, currentTransaction);
                 break;
             case BEGIN:
-                eventHandlerConfiguration.getApplier().applyBeginQueryEvent(event, currentTransaction);
+                applier.applyBeginQueryEvent(event, currentTransaction);
                 break;
             case DDLTABLE:
                 // Sync all the things here.
-                eventHandlerConfiguration.getApplier().forceFlush();
-                eventHandlerConfiguration.getApplier().waitUntilAllRowsAreCommitted(event);
+                applier.forceFlush();
+                applier.waitUntilAllRowsAreCommitted(event);
 
                 try {
                     AugmentedSchemaChangeEvent augmentedSchemaChangeEvent = activeSchemaVersion.transitionSchemaToNextVersion(
@@ -91,7 +95,7 @@ public class QueryEventHandler implements BinlogEventV4Handler {
 
                     LOGGER.info("Save new marker: " + marker.toJson());
                     Coordinator.saveCheckpointMarker(marker);
-                    eventHandlerConfiguration.getApplier().applyAugmentedSchemaChangeEvent(augmentedSchemaChangeEvent, pipelineOrchestrator);
+                    applier.applyAugmentedSchemaChangeEvent(augmentedSchemaChangeEvent, pipelineOrchestrator);
                 } catch (SchemaTransitionException e) {
                     LOGGER.error("Failed to apply query", e);
                     throw new EventHandlerApplyException("Failed to apply event", e);
@@ -107,20 +111,25 @@ public class QueryEventHandler implements BinlogEventV4Handler {
 
                     pipelinePosition.setCurrentPseudoGTID(pseudoGTID);
                     pipelinePosition.setCurrentPseudoGTIDFullQuery(querySQL);
-                    if (eventHandlerConfiguration.getApplier() instanceof HBaseApplier) {
+
+                    LastCommittedPositionCheckpoint pseudoGTIDCheckPoint = new LastCommittedPositionCheckpoint(
+                            pipelinePosition.getCurrentPosition().getHost(),
+                            pipelinePosition.getCurrentPosition().getServerID(),
+                            pipelinePosition.getCurrentPosition().getBinlogFilename(),
+                            pipelinePosition.getCurrentPosition().getBinlogPosition(),
+                            pseudoGTID,
+                            querySQL,
+                            pipelineOrchestrator.getFakeMicrosecondCounter()
+                    );
+
+                    if (applier instanceof HBaseApplier) {
                         try {
-                            ((HBaseApplier) eventHandlerConfiguration.getApplier()).applyPseudoGTIDEvent(new LastCommittedPositionCheckpoint(
-                                    pipelinePosition.getCurrentPosition().getHost(),
-                                    pipelinePosition.getCurrentPosition().getServerID(),
-                                    pipelinePosition.getCurrentPosition().getBinlogFilename(),
-                                    pipelinePosition.getCurrentPosition().getBinlogPosition(),
-                                    pseudoGTID,
-                                    querySQL,
-                                    pipelineOrchestrator.getFakeMicrosecondCounter()
-                            ));
+                            ((HBaseApplier) applier).applyPseudoGTIDEvent(pseudoGTIDCheckPoint);
                         } catch (TaskBufferInconsistencyException e) {
                             e.printStackTrace();
                         }
+                    } else if (applier instanceof KafkaApplier) {
+                        ((KafkaApplier) applier).applyPseudoGTIDEvent(pseudoGTIDCheckPoint);
                     }
                 } catch (QueryInspectorException e) {
                     LOGGER.error("Failed to update pipelinePosition with new pGTID!", e);

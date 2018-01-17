@@ -6,6 +6,7 @@ import com.booking.replication.Metrics;
 import com.booking.replication.applier.Applier;
 import com.booking.replication.applier.ApplierException;
 import com.booking.replication.applier.HBaseApplier;
+import com.booking.replication.applier.KafkaApplier;
 import com.booking.replication.augmenter.EventAugmenter;
 import com.booking.replication.binlog.EventPosition;
 import com.booking.replication.binlog.event.QueryEventType;
@@ -65,7 +66,7 @@ public class PipelineOrchestrator extends Thread {
     private static final long QUEUE_POLL_SLEEP = 500;
     private static EventAugmenter eventAugmenter;
     private static ActiveSchemaVersion activeSchemaVersion;
-    private static LastCommittedPositionCheckpoint lastVerifiedPseudoGTIDCheckPoint;
+    public static LastCommittedPositionCheckpoint lastVerifiedPseudoGTIDCheckPoint;
     public final Configuration configuration;
     private final Configuration.OrchestratorConfiguration orchestratorConfiguration;
     private final ReplicantPool replicantPool;
@@ -227,6 +228,10 @@ public class PipelineOrchestrator extends Thread {
 
     public boolean isReplicatorShutdownRequested() {
         return replicatorShutdownRequested;
+    }
+
+    public String getLastVerifiedGTID() {
+        return lastVerifiedPseudoGTIDCheckPoint != null ? lastVerifiedPseudoGTIDCheckPoint.getPseudoGTID() : null;
     }
 
     @Override
@@ -411,26 +416,23 @@ public class PipelineOrchestrator extends Thread {
         }
 
         // check if the applier commit stream moved to a new check point. If so,
-        // store the the new safe check point; currently only supported for hbase applier
+        // store the the new safe check point; currently only supported for HBase applier
+        LastCommittedPositionCheckpoint lastCommittedPseudoGTIDReportedByApplier = null;
         if (applier instanceof HBaseApplier) {
-            LastCommittedPositionCheckpoint lastCommittedPseudoGTIDReportedByApplier =
-                ((HBaseApplier) applier).getLastCommittedPseudGTIDCheckPoint();
-
-            if (lastVerifiedPseudoGTIDCheckPoint == null
-                    && lastCommittedPseudoGTIDReportedByApplier != null) {
-                lastVerifiedPseudoGTIDCheckPoint = lastCommittedPseudoGTIDReportedByApplier;
-                LOGGER.info("Save new marker: " + lastVerifiedPseudoGTIDCheckPoint.toJson());
-                Coordinator.saveCheckpointMarker(lastVerifiedPseudoGTIDCheckPoint);
-            } else if (lastVerifiedPseudoGTIDCheckPoint != null
-                    && lastCommittedPseudoGTIDReportedByApplier != null) {
-                if (!lastVerifiedPseudoGTIDCheckPoint.getPseudoGTID().equals(
-                        lastCommittedPseudoGTIDReportedByApplier.getPseudoGTID())) {
-                    LOGGER.info("Reached new safe checkpoint " + lastCommittedPseudoGTIDReportedByApplier.getPseudoGTID() );
-                    lastVerifiedPseudoGTIDCheckPoint = lastCommittedPseudoGTIDReportedByApplier;
-                    LOGGER.info("Save new marker: " + lastVerifiedPseudoGTIDCheckPoint.toJson());
-                    Coordinator.saveCheckpointMarker(lastVerifiedPseudoGTIDCheckPoint);
-                }
-            }
+            lastCommittedPseudoGTIDReportedByApplier = ((HBaseApplier) applier).getLastCommittedPseudGTIDCheckPoint();
+        } else if (applier instanceof KafkaApplier) {
+            lastCommittedPseudoGTIDReportedByApplier = ((KafkaApplier) applier).getPseudoGTIDCheckPoint();
+        }
+        if (lastVerifiedPseudoGTIDCheckPoint == null && lastCommittedPseudoGTIDReportedByApplier != null) {
+            lastVerifiedPseudoGTIDCheckPoint = lastCommittedPseudoGTIDReportedByApplier;
+            LOGGER.info("Save new marker: " + lastVerifiedPseudoGTIDCheckPoint.toJson());
+            Coordinator.saveCheckpointMarker(lastVerifiedPseudoGTIDCheckPoint);
+        } else if (lastVerifiedPseudoGTIDCheckPoint != null && lastCommittedPseudoGTIDReportedByApplier != null
+                && !lastVerifiedPseudoGTIDCheckPoint.getPseudoGTID().equals(lastCommittedPseudoGTIDReportedByApplier.getPseudoGTID())) {
+            LOGGER.info("Reached new safe checkpoint " + lastCommittedPseudoGTIDReportedByApplier.getPseudoGTID() );
+            lastVerifiedPseudoGTIDCheckPoint = lastCommittedPseudoGTIDReportedByApplier;
+            LOGGER.info("Save new marker: " + lastVerifiedPseudoGTIDCheckPoint.toJson());
+            Coordinator.saveCheckpointMarker(lastVerifiedPseudoGTIDCheckPoint);
         }
 
         moveFakeMicrosecondCounter(event.getHeader().getTimestamp());

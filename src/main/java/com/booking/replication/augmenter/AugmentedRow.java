@@ -1,5 +1,6 @@
 package com.booking.replication.augmenter;
 
+import com.booking.replication.checkpoints.LastCommittedPositionCheckpoint;
 import com.booking.replication.schema.column.ColumnSchema;
 import com.booking.replication.schema.exception.TableMapException;
 import com.booking.replication.schema.table.TableSchemaVersion;
@@ -35,6 +36,7 @@ public class AugmentedRow {
     @JsonDeserialize(as = TableSchemaVersion.class)
     private TableSchemaVersion tableSchemaVersion;
 
+    private String       lastVerifiedGTID;
     private String       binlogFileName;
     private long         rowBinlogEventOrdinal;
     private String       tableName;
@@ -271,5 +273,17 @@ public class AugmentedRow {
 
     public Long getTransactionXid() {
         return transactionXid;
+    }
+
+    public String getLastVerifiedGTID() {
+        return lastVerifiedGTID;
+    }
+
+    public void setLastVerifiedGTID(String lastVerifiedGTID) {
+        this.lastVerifiedGTID = lastVerifiedGTID;
+    }
+
+    public String getRowPositionID(LastCommittedPositionCheckpoint checkpoint) {
+        return String.format("%s:%010d", checkpoint.getPseudoGTID(), checkpoint.messagesCounterSinceGTID.get());
     }
 }

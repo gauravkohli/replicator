@@ -19,6 +19,7 @@ public class RowListMessage {
 
     private String  firstRowBinlogPositionID;
     private String  lastRowBinlogPositionID;
+    private String  lastRowPositionID;
 
     private boolean isOpen;
 
@@ -113,5 +114,13 @@ public class RowListMessage {
 
     public void setFirstRowBinlogPositionID(String firstRowBinlogPositionID) {
         this.firstRowBinlogPositionID = firstRowBinlogPositionID;
+    }
+
+    public String getLastRowPositionID() {
+        return lastRowPositionID;
+    }
+
+    public void setLastRowPositionID(String lastRowPositionID) {
+        this.lastRowPositionID = lastRowPositionID;
     }
 }

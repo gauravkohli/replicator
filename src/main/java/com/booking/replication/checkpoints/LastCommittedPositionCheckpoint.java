@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Created by bosko on 5/30/16.
@@ -12,6 +13,8 @@ import java.io.IOException;
 public class LastCommittedPositionCheckpoint implements SafeCheckPoint {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LastCommittedPositionCheckpoint.class);
+
+    public final AtomicInteger messagesCounterSinceGTID = new AtomicInteger(0);
 
     private final int checkpointType;
 
