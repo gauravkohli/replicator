@@ -25,7 +25,6 @@ public class ConverterTest {
         Cell c = TinyCell.valueOf(x);
         ColumnSchema s = new ColumnSchema();
         s.setColumnType("tinyint");
-        s.setDataType("tinyint"); // TODO : Remove
 
         assertEquals(Integer.toString(x), Converter.cellValueToString(c, s));
     }
@@ -37,7 +36,6 @@ public class ConverterTest {
 //        Cell c = TinyCell.valueOf(x);
 //        ColumnSchema s = new ColumnSchema();
 //        s.setColumnType("unsigned tinyint");
-//        s.setDataType("tinyint"); // TODO : Remove
 //
 //        assertEquals(Integer.toString(x), Converter.cellValueToString(c, s));
 //    }
@@ -48,7 +46,6 @@ public class ConverterTest {
         Cell c = ShortCell.valueOf(x);
         ColumnSchema s = new ColumnSchema();
         s.setColumnType("smallint");
-        s.setDataType("smallint"); // TODO: Remove
 
         assertEquals(Integer.toString(x), Converter.cellValueToString(c, s));
     }
@@ -64,7 +61,6 @@ public class ConverterTest {
         Cell c = Int24Cell.valueOf(x);
         ColumnSchema s = new ColumnSchema();
         s.setColumnType("mediumint");
-        s.setDataType("mediumint"); // TODO: Remove
 
         assertEquals(Integer.toString(x), Converter.cellValueToString(c, s));
     }
@@ -80,7 +76,6 @@ public class ConverterTest {
         Cell c = LongCell.valueOf(x);
         ColumnSchema s = new ColumnSchema();
         s.setColumnType("int");
-        s.setDataType("int");
 
         assertEquals(Integer.toString(x), Converter.cellValueToString(c, s));
     }
@@ -96,7 +91,6 @@ public class ConverterTest {
         Cell c = LongLongCell.valueOf(x);
         ColumnSchema s = new ColumnSchema();
         s.setColumnType("bigint");
-        s.setDataType("bigint");
 
         assertEquals(Long.toString(x), Converter.cellValueToString(c, s));
     }

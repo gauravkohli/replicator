@@ -58,13 +58,13 @@ public class Converter {
         //
         // Here we go with 2nd approach.
         if (cell instanceof LongCell) {
-            if (columnSchema.getDataType().equals("tinyint")) {
+            if (columnSchema.getColumnType().contains("tinyint")) {
                 cell = TinyCell.valueOf(((LongCell) cell).getValue());
             }
-            if (columnSchema.getDataType().equals("smallint")) {
+            if (columnSchema.getColumnType().contains("smallint")) {
                 cell = ShortCell.valueOf(((LongCell) cell).getValue());
             }
-            if (columnSchema.getDataType().equals("mediumint")) {
+            if (columnSchema.getColumnType().contains("mediumint")) {
                 cell = Int24Cell.valueOf(((LongCell) cell).getValue());
             }
         }
@@ -201,7 +201,7 @@ public class Converter {
             // Whole numbers (with unsigned option) types
             // ================================================================
             // 1 byte
-            if (columnSchema.getDataType().equals("tinyint")) {
+            if (columnSchema.getColumnType().contains("tinyint")) {
                 boolean isUnsigned = isUnsignedPattern.matcher(columnSchema.getColumnType()).find();
                 if (isUnsigned) {
 
@@ -222,7 +222,7 @@ public class Converter {
         } else if (cell instanceof ShortCell) {
             // 2 bytes
             ShortCell sc = (ShortCell) cell;
-            if (columnSchema.getDataType().equals("smallint")) {
+            if (columnSchema.getColumnType().contains("smallint")) {
                 boolean isUnsigned = isUnsignedPattern.matcher(columnSchema.getColumnType()).find();
                 if (isUnsigned) {
                     return Long.toString(((long) sc.getValue()) & 0xffff);
@@ -236,7 +236,7 @@ public class Converter {
         } else if (cell instanceof Int24Cell) {
             // medium-int (3 bytes) in MySQL
             Int24Cell ic = (Int24Cell) cell;
-            if (columnSchema.getDataType().equals("mediumint")) {
+            if (columnSchema.getColumnType().contains("mediumint")) {
                 boolean isUnsigned = isUnsignedPattern.matcher(columnSchema.getColumnType()).find();
                 if (isUnsigned) {
                     return Long.toString(((long) ic.getValue()) & 0xffffff);
@@ -245,12 +245,12 @@ public class Converter {
                     return ic.toString();
                 }
             } else {
-                throw new TableMapException("Type mismatch for: { cell: " + cell.getClass() + ", column: " + columnSchema.getDataType());
+                throw new TableMapException("Type mismatch for: { cell: " + cell.getClass() + ", column: " + columnSchema.getColumnType());
             }
         } else if (cell instanceof LongCell) {
             // MySQL int (4 bytes)
             LongCell lc = (LongCell) cell;
-            if (columnSchema.getDataType().equals("int")) {
+            if (columnSchema.getColumnType().contains("int")) {
                 boolean isUnsigned = isUnsignedPattern.matcher(columnSchema.getColumnType()).find();
                 if (isUnsigned) {
                     byte[] bytes = ByteBuffer.allocate(4).putInt(lc.getValue()).array();
@@ -267,7 +267,7 @@ public class Converter {
         } else if (cell instanceof LongLongCell) {
             // MySQL BigInt (8 bytes)
             LongLongCell llc = (LongLongCell) cell;
-            if (columnSchema.getDataType().equals("bigint")) {
+            if (columnSchema.getColumnType().contains("bigint")) {
                 boolean isUnsigned = isUnsignedPattern.matcher(columnSchema.getColumnType()).find();
                 if (isUnsigned) {
                     byte[] bytes = ByteBuffer.allocate(8).putLong(llc.getValue()).array();
@@ -279,7 +279,7 @@ public class Converter {
                 }
             } else {
                 throw new TableMapException("Unknown"
-                        + " MySQL type " + columnSchema.getDataType()
+                        + " MySQL type " + columnSchema.getColumnType()
                         + " in the event " + cell.getClass()
                         + " Object = " + cell
                 );
