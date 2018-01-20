@@ -9,8 +9,8 @@ import java.math.BigDecimal;
 public class DecimalCell implements Cell {
 
     private final BigDecimal value;
-    private final int precision;
-    private final int scale;
+    private final int precision; // TODO: Remove. Duplicate info
+    private final int scale; // TODO: Remove. Duplicate info
 
     /**
      *
@@ -33,4 +33,6 @@ public class DecimalCell implements Cell {
     public int getScale() {
         return scale;
     }
+
+    public String toString() { return value.toString(); }
 }

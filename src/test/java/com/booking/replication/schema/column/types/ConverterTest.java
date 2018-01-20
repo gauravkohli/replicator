@@ -6,6 +6,7 @@ import com.booking.replication.schema.column.ColumnSchema;
 import com.booking.replication.schema.exception.TableMapException;
 import org.junit.Test;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -126,6 +127,16 @@ public class ConverterTest {
         s.setColumnType("float");
 
         assertEquals("1.5", Converter.cellValueToString(c, s));
+    }
+
+    @Test
+    public void decimalCell() throws TableMapException {
+        BigDecimal num = new BigDecimal("123.45");
+        Cell c = new DecimalCell(num, num.precision(), num.scale());
+        ColumnSchema s = new ColumnSchema();
+        s.setColumnType("decimal");
+
+        assertEquals(num.toString(), Converter.cellValueToString(c, s));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
