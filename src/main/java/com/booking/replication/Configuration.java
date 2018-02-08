@@ -75,6 +75,8 @@ public class Configuration {
     private static class AugmenterConfiguration {
         public boolean apply_uuid = false;
         public boolean apply_xid = false;
+        @JsonProperty("convert_null_to_string")
+        public boolean convertNullToString = false;
     }
 
     @JsonDeserialize
@@ -587,7 +589,10 @@ public class Configuration {
     public boolean getAugmenterApplyXid(){
         return augmenterConfiguration.apply_xid;
     }
-
+    public boolean getAugmenterConverNullToString(){
+        return augmenterConfiguration.convertNullToString;
+    }
+    
     /**
      * Kafka configuration getters.
      */

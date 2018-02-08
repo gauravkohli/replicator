@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
 import static com.codahale.metrics.MetricRegistry.name;
 
 /**
- * Simple wrapper for Open Replicator. Writes events to blocking queue.
+ * Simple wrapper for Open Replicator and Binlog Connector. Writes events to blocking queue.
  */
 public class BinlogEventProducer {
 
