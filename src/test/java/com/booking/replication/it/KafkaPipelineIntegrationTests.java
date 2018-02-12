@@ -2,20 +2,25 @@ package com.booking.replication.it;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+
 import org.junit.ClassRule;
+import org.junit.Rule;
 import org.junit.Test;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.junit.Assert.assertEquals;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import org.slf4j.Logger;
 
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.*;
+
 import org.testcontainers.containers.output.Slf4jLogConsumer;
+
 import org.testcontainers.images.RemoteDockerImage;
-import static org.junit.Assert.assertEquals;
+
 
 import lombok.NonNull;
 
@@ -26,69 +31,67 @@ public class KafkaPipelineIntegrationTests {
 
     private static final Logger logger = LoggerFactory.getLogger(KafkaPipelineIntegrationTests.class);
 
-    @ClassRule
-    public static MySQLContainer mysqlCustomConfig = new MySQLContainer("mysql:5.6");
+    private class Pipeline {
 
-    @ClassRule
-    public static GenericContainer zookeeper = new GenericContainer("zookeeper:3.4");
+        public  Network network;
 
-    @ClassRule
-    public static GenericContainer kafka = new GenericContainer("wurstmeister/kafka:1.0.0");
+        public GenericContainer mysql;
+        public GenericContainer zookeeper;
+        public GenericContainer kafka;
+        public GenericContainer replicator;
 
-    @ClassRule
-    public static GenericContainer replicator = new GenericContainer(
-            new RemoteDockerImage("replicator-runner:latest")
-    );
+        public Pipeline() {
 
-//    @Test
-//    public void testMySQL2KafkaPipeline(){
-//
-//        String runReplicatorCommand = "java -jar /replicator/mysql-replicator.jar \\\n" +
-//                "    --parser bc \\\n" +
-//                "    --applier kafka \\\n" +
-//                "    --schema test \\\n" +
-//                "    --binlog-filename binlog.000001 \\\n" +
-//                "    --config-path replicator-conf.yaml";
-//
-//    }
+            network = Network.newNetwork();
 
-    @Test
-    public void testSimple() throws SQLException {
+            mysql = new GenericContainer("mysql:5.6.27")
+                    .withNetwork(network)
+                    .withNetworkAliases("mysql")
+                    .withClasspathResourceMapping(
+                            "my.cnf",
+                            "/etc/mysql/conf.d/my.cnf",
+                            BindMode.READ_ONLY)
+                    .withClasspathResourceMapping(
+                            "mysql_init_dbs.sh",
+                            "/docker-entrypoint-initdb.d/mysql_init_dbs.sh",
+                            BindMode.READ_ONLY)
 
-        MySQLContainer mysql = (MySQLContainer) new MySQLContainer()
-                .withLogConsumer(new Slf4jLogConsumer(logger));
-        mysql.start();
+            .withEnv("MYSQL_ROOT_PASSWORD", "mysqlPass");
 
-        try {
-            ResultSet resultSet = performQuery(mysql, "SELECT 1");
-            int resultSetInt = resultSet.getInt(1);
+            zookeeper = new GenericContainer("zookeeper:3.4")
+                    .withNetwork(network)
+                    .withNetworkAliases("zookeeper");
 
-            assertEquals("A basic SELECT query succeeds", 1, resultSetInt);
-        } finally {
-            mysql.stop();
+            kafka = new GenericContainer("wurstmeister/kafka:1.0.0")
+                    .withNetwork(network)
+                    .withNetworkAliases("kafka")
+                    .withEnv("KAFKA_ZOOKEEPER_CONNECT", "zookeeper:2181")
+                    .withEnv("KAFKA_CREATE_TOPICS", "replicator_test_kafka:1:1,replicator_validation:1:1");
+
+
+//            String runReplicatorCommand = "java -jar /replicator/mysql-replicator.jar \\\n" +
+//                    "    --parser bc \\\n" +
+//                    "    --applier kafka \\\n" +
+//                    "    --schema test \\\n" +
+//                    "    --binlog-filename binlog.000001 \\\n" +
+//                    "    --config-path /replicator/replicator-conf.yaml";
+
+            replicator = new GenericContainer(new RemoteDockerImage("replicator-runner:latest"))
+                    .withNetwork(network)
+                    .withNetworkAliases("replicator");
+
+            mysql.start();
+            zookeeper.start();
+            kafka.start();
+            replicator.start();
+
         }
     }
 
-    @NonNull
-    protected ResultSet performQuery(MySQLContainer containerRule, String sql) throws SQLException {
-
-        HikariConfig hikariConfig = new HikariConfig();
-
-        hikariConfig.setJdbcUrl(containerRule.getJdbcUrl());
-        hikariConfig.setUsername(containerRule.getUsername());
-        hikariConfig.setPassword(containerRule.getPassword());
-
-        HikariDataSource ds = new HikariDataSource(hikariConfig);
-
-        Statement statement = ds.getConnection().createStatement();
-
-        statement.execute(sql);
-
-        ResultSet resultSet = statement.getResultSet();
-
-        resultSet.next();
-
-        return resultSet;
+    @Test
+    public void testMySQL2KafkaPipeline() throws InterruptedException {
+        Pipeline pipeline = new Pipeline();
+        Thread.sleep(1000000);
     }
 
 }
