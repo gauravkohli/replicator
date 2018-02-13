@@ -12,12 +12,10 @@ import com.booking.replication.util.Cmd;
 import com.booking.replication.util.StartupParameters;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.google.code.or.binlog.BinlogEventV4;
 import com.google.code.or.binlog.impl.event.BinlogEventV4HeaderImpl;
 import com.google.code.or.binlog.impl.event.QueryEvent;
 import com.google.code.or.binlog.impl.event.WriteRowsEventV2;
 import com.google.code.or.binlog.impl.event.XidEvent;
-import com.google.code.or.common.glossary.column.StringColumn;
 import com.google.code.or.common.util.MySQLConstants;
 import joptsimple.OptionSet;
 import org.junit.Before;
@@ -25,7 +23,6 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -61,7 +58,7 @@ public class PipelineOrchestratorTest {
     private BinlogEventProducer binlogEventProducer;
 
     private static void configure() throws IOException {
-        String configName = "sampleConfiguration.yaml";
+        String configName = "replicator-conf.yaml";
         args[0] = "-c" + configName;
         OptionSet optionSet = Cmd.parseArgs(args);
         StartupParameters startupParameters = new StartupParameters(optionSet);
