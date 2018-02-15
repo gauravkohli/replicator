@@ -12,6 +12,13 @@ import org.testcontainers.containers.*;
 
 import org.testcontainers.images.RemoteDockerImage;
 
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.PartitionInfo;
+import org.apache.kafka.common.TopicPartition;
 /**
  * Created by bdevetak on 2/8/18.
  */
@@ -29,6 +36,9 @@ class TestKafkaPipeline {
         public GenericContainer replicator;
         public GenericContainer graphite;
 
+        private static final Integer KAFKA_PORT = 9092;
+        private static final Integer ZOOKEEPER_PORT = 2181;
+
         public Pipeline() {
 
             network = Network.newNetwork();
@@ -37,13 +47,15 @@ class TestKafkaPipeline {
                     .withNetwork(network)
                     .withNetworkAliases("mysql")
                     .withClasspathResourceMapping(
-                    "my.cnf",
-                    "/etc/mysql/conf.d/my.cnf",
-                    BindMode.READ_ONLY)
+                        "my.cnf",
+                        "/etc/mysql/conf.d/my.cnf",
+                        BindMode.READ_ONLY
+                    )
                     .withClasspathResourceMapping(
-                    "mysql_init_dbs.sh",
-                    "/docker-entrypoint-initdb.d/mysql_init_dbs.sh",
-                    BindMode.READ_ONLY)
+                        "mysql_init_dbs.sh",
+                        "/docker-entrypoint-initdb.d/mysql_init_dbs.sh",
+                        BindMode.READ_ONLY
+                    )
                     .withEnv("MYSQL_ROOT_PASSWORD", "mysqlPass")
                     .withExposedPorts(3306)
             ;
@@ -51,6 +63,7 @@ class TestKafkaPipeline {
             zookeeper = new GenericContainer("zookeeper:3.4")
                     .withNetwork(network)
                     .withNetworkAliases("zookeeper")
+                    .withExposedPorts(ZOOKEEPER_PORT)
             ;
 
             kafka = new GenericContainer("wurstmeister/kafka:1.0.0")
@@ -58,6 +71,7 @@ class TestKafkaPipeline {
                     .withNetworkAliases("kafka")
                     .withEnv("KAFKA_ZOOKEEPER_CONNECT", "zookeeper:2181")
                     .withEnv("KAFKA_CREATE_TOPICS", "replicator_test_kafka:1:1,replicator_validation:1:1")
+                    .withExposedPorts(9092)
             ;
 
             graphite = new GenericContainer("hopsoft/graphite-statsd:latest")
@@ -105,6 +119,14 @@ class TestKafkaPipeline {
             return mysql.getMappedPort(3306);
         }
 
+        public String getKafkaIP() {
+            return kafka.getContainerIpAddress();
+        }
+
+        public Integer getKafkaPort() {
+            return kafka.getMappedPort(9092);
+        }
+
 
         public String getGraphitelIP() {
             return graphite.getContainerIpAddress();
@@ -113,6 +135,20 @@ class TestKafkaPipeline {
         public Integer getGraphitePort() {
             return graphite.getMappedPort(80);
         }
+
+        private static Properties getKafkaConsumerProperties(String broker) {
+            // Consumer configuration
+            Properties prop = new Properties();
+            prop.put("bootstrap.servers", broker);
+            prop.put("group.id", "testGroup");
+            prop.put("auto.offset.reset", "latest");
+            prop.put("enable.auto.commit", "false");
+            prop.put("session.timeout.ms", "30000");
+            prop.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+            prop.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+            return prop;
+        }
+
     }
 
     @Test
@@ -234,10 +270,52 @@ class TestKafkaPipeline {
         replicant.close()
         activeSchema.close()
 
-        // TODO: read from Kafka and compare
+        // ====================================================================
+        // Read from Kafka and compare
+        final int POLL_TIME_OUT = 1000;
+        def topicName = "replicator_test_kafka"
+
+        def brokerAddress = pipeline.getKafkaIP() + ":" + pipeline.getKafkaPort()
+
+        logger.info("kafka broker: " + brokerAddress)
+
+        def consumer = new KafkaConsumer<>(Pipeline.getKafkaConsumerProperties(brokerAddress));
+
+
+        Thread.sleep(1000000);
+
+        for (PartitionInfo pi: consumer.partitionsFor(topicName)) {
+
+            logger.info("partition: " + pi.toString())
+
+            TopicPartition partition = new TopicPartition(topicName, pi.partition());
+
+            consumer.assign(Collections.singletonList(partition));
+            consumer.seek(partition,1);
+
+
+
+            logger.info("Position: " + String.valueOf(consumer.position(partition)));
+
+            int count = 0;
+
+            while (true) {
+                count ++;
+                ConsumerRecords<String, String> records = consumer.poll(POLL_TIME_OUT);
+                for (ConsumerRecord<String, String> record : records) {
+                    logger.info("Message no: ${count}")
+                    logger.info(
+                            "offset = ${record.offset()}, key = ${record.key()}, value = ${record.value()}"
+                    );
+
+                    if(count == 5) {
+                        break;
+                    }
+                }
+            }
+        }
 
         Thread.sleep(1000000);
     }
 
 }
-
