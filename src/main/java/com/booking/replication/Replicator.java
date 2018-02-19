@@ -1,7 +1,7 @@
 package com.booking.replication;
 
 import com.booking.replication.applier.*;
-import com.booking.replication.checkpoints.LastCommittedPositionCheckpoint;
+import com.booking.replication.checkpoints.PseudoGTIDCheckpoint;
 import com.booking.replication.monitor.*;
 import com.booking.replication.pipeline.BinlogEventProducer;
 import com.booking.replication.pipeline.BinlogPositionInfo;
@@ -11,7 +11,6 @@ import com.booking.replication.queues.ReplicatorQueues;
 import com.booking.replication.replicant.MysqlReplicantPool;
 import com.booking.replication.replicant.ReplicantPool;
 
-import com.booking.replication.schema.ActiveSchemaVersion;
 import com.booking.replication.schema.MysqlActiveSchemaVersion;
 import com.booking.replication.util.BinlogCoordinatesFinder;
 import com.booking.replication.validation.ValidationService;
@@ -93,7 +92,7 @@ public class Replicator {
                 //  3. get binlog-filename and binlog-position that correspond to
                 //     Pseudo GTID on the active host (this is done by calling the
                 //     MySQL Orchestrator http API (https://github.com/outbrain/orchestrator).
-                LastCommittedPositionCheckpoint safeCheckPoint = Coordinator.getSafeCheckpoint();
+                PseudoGTIDCheckpoint safeCheckPoint = Coordinator.getSafeCheckpoint();
                 if ( safeCheckPoint != null ) {
 
                     String pseudoGTID = safeCheckPoint.getPseudoGTID();
@@ -179,7 +178,7 @@ public class Replicator {
             } else {
                 LOGGER.info("Start binlog not specified, reading metadata from coordinator");
                 // Safe Check Point
-                LastCommittedPositionCheckpoint safeCheckPoint = Coordinator.getSafeCheckpoint();
+                PseudoGTIDCheckpoint safeCheckPoint = Coordinator.getSafeCheckpoint();
                 if ( safeCheckPoint != null ) {
 
                     String mysqlHost      = safeCheckPoint.getHostName();

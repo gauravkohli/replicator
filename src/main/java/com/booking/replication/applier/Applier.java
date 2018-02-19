@@ -18,6 +18,8 @@ import java.io.IOException;
  */
 public interface Applier {
 
+    SupportedAppliers.ApplierName getApplierName() throws ApplierException;
+
     void applyAugmentedRowsEvent(AugmentedRowsEvent augmentedSingleRowEvent, CurrentTransaction currentTransaction)
             throws ApplierException, IOException;
 

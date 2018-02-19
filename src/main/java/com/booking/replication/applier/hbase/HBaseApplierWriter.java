@@ -5,7 +5,7 @@ import com.booking.replication.applier.ApplierException;
 import com.booking.replication.applier.TaskStatus;
 import com.booking.replication.augmenter.AugmentedRow;
 import com.booking.replication.augmenter.AugmentedRowsEvent;
-import com.booking.replication.checkpoints.LastCommittedPositionCheckpoint;
+import com.booking.replication.checkpoints.PseudoGTIDCheckpoint;
 import com.booking.replication.validation.ValidationService;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
@@ -92,7 +92,7 @@ public class HBaseApplierWriter {
     private static final
         ConcurrentHashMap<String, String> taskUUIDToPseudoGTID = new ConcurrentHashMap<>();
 
-    private static LastCommittedPositionCheckpoint latestCommittedPseudoGTIDCheckPoint;
+    private static PseudoGTIDCheckpoint latestCommittedPseudoGTIDCheckPoint;
     /**
      * Shared connection used by all tasks in applier.
      */
@@ -135,7 +135,7 @@ public class HBaseApplierWriter {
     private static final Counter
             applierTasksFailedCounter = Metrics.registry.counter(name("HBase", "applierTasksFailedCounter"));
 
-    public static LastCommittedPositionCheckpoint getLatestCommittedPseudoGTIDCheckPoint() {
+    public static PseudoGTIDCheckpoint getLatestCommittedPseudoGTIDCheckPoint() {
         return latestCommittedPseudoGTIDCheckPoint;
     }
 
@@ -251,9 +251,11 @@ public class HBaseApplierWriter {
         throw new IOException("Could not create HBase connection, all retry attempts failed. Last exception was:", lastException);
     }
 
-    public synchronized void markCurrentTaskWithPseudoGTID(LastCommittedPositionCheckpoint pseudoGTIDCheckPoint)
+    public synchronized void markCurrentTaskWithPseudoGTID(PseudoGTIDCheckpoint pseudoGTIDCheckPoint)
         throws TaskBufferInconsistencyException {
         // Verify that task uuid exists
+        LOGGER.info("\tmarking task " + currentTaskUuid + " with pgtid " + pseudoGTIDCheckPoint.getPseudoGTID());
+
         if (taskTransactionBuffer.get(currentTaskUuid) == null) {
             throw new TaskBufferInconsistencyException("ERROR: Missing task UUID ("
                     + currentTaskUuid
@@ -491,7 +493,7 @@ public class HBaseApplierWriter {
                         }
 
                         // Do the accounting needed when task is successfully committed
-                        LastCommittedPositionCheckpoint newCheckPoint =
+                        PseudoGTIDCheckpoint newCheckPoint =
                             notYetCommittedTasksAccountant.doAccountingOnTaskSuccess(
                                 taskTransactionBuffer,
                                 submittedTaskUuid

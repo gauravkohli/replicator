@@ -1,6 +1,6 @@
 package com.booking.replication;
 
-import com.booking.replication.checkpoints.LastCommittedPositionCheckpoint;
+import com.booking.replication.checkpoints.PseudoGTIDCheckpoint;
 import com.booking.replication.coordinator.CoordinatorInterface;
 
 import org.slf4j.Logger;
@@ -23,7 +23,7 @@ public class Coordinator {
         return implementation;
     }
 
-    public static void saveCheckpointMarker(LastCommittedPositionCheckpoint marker) throws Exception {
+    public static void saveCheckpointMarker(PseudoGTIDCheckpoint marker) throws Exception {
         implementation.storeSafeCheckPoint(marker);
     }
 
@@ -32,8 +32,8 @@ public class Coordinator {
      *
      * @return Checkpoint marker
      */
-    public static LastCommittedPositionCheckpoint getSafeCheckpoint() {
-        LastCommittedPositionCheckpoint cp = implementation.getSafeCheckPoint();
+    public static PseudoGTIDCheckpoint getSafeCheckpoint() {
+        PseudoGTIDCheckpoint cp = implementation.getSafeCheckPoint();
         try {
             LOGGER.info(String.format("Got checkpoint: %s", implementation.serialize(cp)));
         } catch (Exception e) {
