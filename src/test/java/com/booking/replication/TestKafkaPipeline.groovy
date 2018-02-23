@@ -61,12 +61,12 @@ class TestKafkaPipeline {
                     .withExposedPorts(ZOOKEEPER_PORT)
             ;
 
-            kafka = new GenericContainer("wurstmeister/kafka:1.0.0")
+            kafka = new FixedHostPortGenericContainer("wurstmeister/kafka:1.0.0")
                     .withNetwork(network)
                     .withNetworkAliases("kafka")
                     .withEnv("KAFKA_ZOOKEEPER_CONNECT", "zookeeper:2181")
                     .withEnv("KAFKA_CREATE_TOPICS", "replicator_test_kafka:1:1,replicator_validation:1:1")
-                    .withExposedPorts(KAFKA_PORT)
+                    .withExposedPorts(9092)
             ;
 
             graphite = new GenericContainer("hopsoft/graphite-statsd:latest")
@@ -87,21 +87,23 @@ class TestKafkaPipeline {
 
         }
 
-        public void startReplication() {
+        public Thread startReplication() {
 
-            def result = replicator.execInContainer(
-                    "java",
-                    "-jar", "/replicator/mysql-replicator.jar",
-                    "--applier", "kafka",
-                    "--schema", "test",
-                    "--binlog-filename", "binlog.000001",
-                    "--config-path", "/replicator/replicator-conf.yaml"
-            );
+            def thread = Thread.start {
+                def result = replicator.execInContainer(
+                        "java",
+                        "-jar", "/replicator/mysql-replicator.jar",
+                        "--applier", "kafka",
+                        "--schema", "test",
+                        "--binlog-filename", "binlog.000001",
+                        "--config-path", "/replicator/replicator-conf.yaml"
+                );
 
-            logger.info(result.stderr.toString());
+                logger.info(result.stderr.toString());
+                logger.info(result.stdout.toString());
+            }
 
-            logger.info(result.stdout.toString());
-
+            return thread
         }
 
         public void start() {
@@ -288,7 +290,8 @@ class TestKafkaPipeline {
 
         // ====================================================================
         // Start replication
-        pipeline.startReplication()
+        def replicatorHandle = pipeline.startReplication()
+
         logger.info("started replication to Kafka")
 
         // ====================================================================
@@ -301,24 +304,38 @@ class TestKafkaPipeline {
         logger.info("kafka broker: " + brokerAddress)
 
 
+        Thread.sleep(1000);
+
+        pipeline.replicator.stop();
+
+        replicatorHandle.join();
+
+        logger.info("replication stopped")
+
         def consumer = new KafkaConsumer<>(Pipeline.getKafkaConsumerProperties(brokerAddress));
 
+//        for (PartitionInfo pi: consumer.partitionsFor(topicName)) {
+//            logger.info("{ topic => "
+//                    + pi.topic().toString()
+//                    + ", partition => "
+//                    + pi.toString()
+//                    + " }"
+//            )
+//        }
 
         for (PartitionInfo pi: consumer.partitionsFor(topicName)) {
-            logger.info("partition: " + pi.toString())
-        }
 
-        for (PartitionInfo pi: consumer.partitionsFor(topicName)) {
-
-
-            logger.info("partition: " + pi.toString())
+            logger.info("{ topic => "
+                    + pi.topic().toString()
+                    + ", partition => "
+                    + pi.toString()
+                    + " }"
+            )
 
             TopicPartition partition = new TopicPartition(topicName, pi.partition());
 
             consumer.assign(Collections.singletonList(partition));
             consumer.seek(partition,1);
-
-
 
             logger.info("Position: " + String.valueOf(consumer.position(partition)));
 
