@@ -1,4 +1,4 @@
-package com.booking.replication.it;
+package com.booking.replication;
 
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -13,9 +13,7 @@ import org.testcontainers.images.RemoteDockerImage;
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 
@@ -255,7 +253,7 @@ class TestKafkaPipeline {
                     }
             }
 
-//        // SELECT
+            // SELECT
             def resultSet = []
             replicant.eachRow('select * from sometable') {
                 row ->
@@ -306,10 +304,12 @@ class TestKafkaPipeline {
         def consumer = new KafkaConsumer<>(Pipeline.getKafkaConsumerProperties(brokerAddress));
 
 
-        Thread.sleep(1000000);
-
+        for (PartitionInfo pi: consumer.partitionsFor(topicName)) {
+            logger.info("partition: " + pi.toString())
+        }
 
         for (PartitionInfo pi: consumer.partitionsFor(topicName)) {
+
 
             logger.info("partition: " + pi.toString())
 
