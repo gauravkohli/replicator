@@ -9,7 +9,6 @@ import groovy.sql.Sql;
 import static groovy.json.JsonOutput.*
 
 import org.testcontainers.containers.*;
-
 import org.testcontainers.images.RemoteDockerImage;
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -19,9 +18,7 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
-/**
- * Created by bdevetak on 2/8/18.
- */
+
 class TestKafkaPipeline {
 
     private static final Logger logger = LoggerFactory.getLogger(TestKafkaPipeline.class);
@@ -71,7 +68,7 @@ class TestKafkaPipeline {
                     .withNetworkAliases("kafka")
                     .withEnv("KAFKA_ZOOKEEPER_CONNECT", "zookeeper:2181")
                     .withEnv("KAFKA_CREATE_TOPICS", "replicator_test_kafka:1:1,replicator_validation:1:1")
-                    .withExposedPorts(9092)
+                    .withExposedPorts(KAFKA_PORT)
             ;
 
             graphite = new GenericContainer("hopsoft/graphite-statsd:latest")
@@ -80,18 +77,32 @@ class TestKafkaPipeline {
                     .withExposedPorts(80)
             ;
 
-
-            def startReplication = "java -jar /replicator/mysql-replicator.jar --parser bc --applier kafka --schema test --binlog-filename binlog.000001 --config-path /replicator/replicator-conf.yaml"
-
             replicator = new GenericContainer(new RemoteDockerImage("replicator-runner:latest"))
                     .withNetwork(network)
                     .withNetworkAliases("replicator")
                     .withClasspathResourceMapping(
                         "replicator-conf.yaml",
                         "/replicator/replicator-conf.yaml",
-                        BindMode.READ_ONLY)
-                    .withCommand(startReplication)
+                        BindMode.READ_ONLY
+                    )
             ;
+
+        }
+
+        public void startReplication() {
+
+            def result = replicator.execInContainer(
+                    "java",
+                    "-jar", "/replicator/mysql-replicator.jar",
+                    "--applier", "kafka",
+                    "--schema", "test",
+                    "--binlog-filename", "binlog.000001",
+                    "--config-path", "/replicator/replicator-conf.yaml"
+            );
+
+            logger.info(result.stderr.toString());
+
+            logger.info(result.stdout.toString());
 
         }
 
@@ -104,10 +115,10 @@ class TestKafkaPipeline {
         }
 
         public void shutdown() {
-            replicator.start();
+            replicator.stop();
             graphite.stop();
             kafka.start();
-            zookeeper.start();
+            zookeeper.stop();
             mysql.stop();
         }
 
@@ -124,7 +135,7 @@ class TestKafkaPipeline {
         }
 
         public Integer getKafkaPort() {
-            return kafka.getMappedPort(9092);
+            return kafka.getMappedPort(KAFKA_PORT);
         }
 
 
@@ -149,56 +160,46 @@ class TestKafkaPipeline {
             return prop;
         }
 
-    }
+        private void InsertTestRowsToMySQL() {
 
-    @Test
-    public void testMySQL2KafkaPipeline() throws InterruptedException {
+            def urlReplicant = 'jdbc:mysql://' + this.getMySqlIP() + ":" + this.getMySqlPort() + '/test'
+            def urlActiveSchema = 'jdbc:mysql://' + this.getMySqlIP() + ":" + this.getMySqlPort() + '/test_active_schema'
 
-        Pipeline pipeline = new Pipeline();
-        pipeline.start();
+            logger.info("jdbc url: " + urlReplicant)
 
-        logger.info("Pipeline started");
-        logger.info("MySQL is exposed at " + pipeline.getMySqlIP() + ":" + pipeline.getMySqlPort());
-        logger.info("Graphite is exposed at " + pipeline.getGraphitelIP() + ":" + pipeline.getGraphitePort());
+            def dbReplicant = [
+                    url     : urlReplicant,
+                    user    : 'root',
+                    password: 'mysqlPass',
+                    driver  : 'com.mysql.jdbc.Driver'
+            ]
 
-        def urlReplicant    = 'jdbc:mysql://' + pipeline.getMySqlIP() + ":" + pipeline.getMySqlPort() + '/test'
-        def urlActiveSchema = 'jdbc:mysql://' + pipeline.getMySqlIP() + ":" + pipeline.getMySqlPort() + '/test_active_schema'
+            def dbActiveSchema = [
+                    url     : urlActiveSchema,
+                    user    : 'root',
+                    password: 'mysqlPass',
+                    driver  : 'com.mysql.jdbc.Driver'
+            ]
 
-        logger.info("jdbc url: " + urlReplicant)
+            def replicant = Sql.newInstance(
+                    dbReplicant.url,
+                    dbReplicant.user,
+                    dbReplicant.password,
+                    dbReplicant.driver
+            )
 
-        def dbReplicant = [
-                url:urlReplicant,
-                user:'root',
-                password:'mysqlPass',
-                driver:'com.mysql.jdbc.Driver'
-        ]
+            def activeSchema = Sql.newInstance(
+                    dbActiveSchema.url,
+                    dbActiveSchema.user,
+                    dbActiveSchema.password,
+                    dbActiveSchema.driver
+            )
 
-        def dbActiveSchema = [
-                url:urlActiveSchema,
-                user:'root',
-                password:'mysqlPass',
-                driver:'com.mysql.jdbc.Driver'
-        ]
+            replicant.connection.autoCommit = false
+            activeSchema.connection.autoCommit = false
 
-        def replicant = Sql.newInstance(
-                dbReplicant.url,
-                dbReplicant.user,
-                dbReplicant.password,
-                dbReplicant.driver
-        )
-
-        def activeSchema = Sql.newInstance(
-                dbActiveSchema.url,
-                dbActiveSchema.user,
-                dbActiveSchema.password,
-                dbActiveSchema.driver
-        )
-
-        replicant.connection.autoCommit = false
-        activeSchema.connection.autoCommit = false
-
-        // CREATE
-        def sqlCreate = """
+            // CREATE
+            def sqlCreate = """
  CREATE TABLE IF NOT EXISTS
           sometable (
           pk_part_1         varchar(5) NOT NULL DEFAULT '',
@@ -211,25 +212,26 @@ class TestKafkaPipeline {
         ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 """
 
-        replicant.execute("reset master")
-        replicant.execute(sqlCreate);
-        replicant.commit();
+            replicant.execute("reset master")
+            replicant.execute(sqlCreate);
+            replicant.commit();
 
-        activeSchema.execute("reset master")
-        activeSchema.execute(sqlCreate);
-        activeSchema.commit();
+            activeSchema.execute("reset master")
+            activeSchema.execute(sqlCreate);
+            activeSchema.commit();
 
-        // INSERT
-        def testRows = [
-            ['tNMeE','686140','665726','PZBAAQSVoSxxFassEAQ'],
-            ['QrTSd','1049668','49070','cvjIXQiWLegvLs kXaKH'],
-            ['xzbTw','4484536','437616','pjFNkiZExAiHkKiJePMp'],
-            ['CIael','2872792','978231','RWURqZcnAGwQfRSisYcr'],
-            ['Cwd j','2071578','260864','jrotGtNYxRmpIKJbAEPd']
-        ]
+            // INSERT
+            def testRows = [
+                    ['tNMeE', '686140', '665726', 'PZBAAQSVoSxxFassEAQ'],
+                    ['QrTSd', '1049668', '49070', 'cvjIXQiWLegvLs kXaKH'],
+                    ['xzbTw', '4484536', '437616', 'pjFNkiZExAiHkKiJePMp'],
+                    ['CIael', '2872792', '978231', 'RWURqZcnAGwQfRSisYcr'],
+                    ['Cwd j', '2071578', '260864', 'jrotGtNYxRmpIKJbAEPd']
+            ]
 
-        testRows.each{
-            row -> try {
+            testRows.each {
+                row ->
+                    try {
                         def sqlString = """
                             INSERT INTO
                                 sometable (
@@ -250,25 +252,46 @@ class TestKafkaPipeline {
                         replicant.commit()
                     } catch (Exception ex) {
                         replicant.rollback()
-                }
-        }
+                    }
+            }
 
 //        // SELECT
-        def resultSet = []
-        replicant.eachRow('select * from sometable') {
-            row ->
-                resultSet.add([
-                        pk_part_1: row.pk_part_1,
-                        pk_part_2: row.pk_part_2,
-                        randomInt: row.randomInt,
-                        randomVarchar: row.randomVarchar
-                ])
+            def resultSet = []
+            replicant.eachRow('select * from sometable') {
+                row ->
+                    resultSet.add([
+                            pk_part_1    : row.pk_part_1,
+                            pk_part_2    : row.pk_part_2,
+                            randomInt    : row.randomInt,
+                            randomVarchar: row.randomVarchar
+                    ])
+            }
+
+            logger.info("retrieved from MySQL: " + prettyPrint(toJson(resultSet)))
+
+            replicant.close()
+            activeSchema.close()
         }
+    }
 
-        logger.info("retrieved from MySQL: " + prettyPrint(toJson(resultSet)))
+    @Test
+    public void testMySQL2KafkaPipeline() throws InterruptedException {
 
-        replicant.close()
-        activeSchema.close()
+        Pipeline pipeline = new Pipeline();
+        pipeline.start();
+
+        logger.info("Pipeline started");
+        logger.info("MySQL is exposed at " + pipeline.getMySqlIP() + ":" + pipeline.getMySqlPort());
+        logger.info("Graphite is exposed at " + pipeline.getGraphitelIP() + ":" + pipeline.getGraphitePort());
+
+        // ====================================================================
+        // Insert test rows to MySQL
+        pipeline.InsertTestRowsToMySQL()
+
+        // ====================================================================
+        // Start replication
+        pipeline.startReplication()
+        logger.info("started replication to Kafka")
 
         // ====================================================================
         // Read from Kafka and compare
@@ -279,10 +302,12 @@ class TestKafkaPipeline {
 
         logger.info("kafka broker: " + brokerAddress)
 
+
         def consumer = new KafkaConsumer<>(Pipeline.getKafkaConsumerProperties(brokerAddress));
 
 
         Thread.sleep(1000000);
+
 
         for (PartitionInfo pi: consumer.partitionsFor(topicName)) {
 
@@ -317,5 +342,4 @@ class TestKafkaPipeline {
 
         Thread.sleep(1000000);
     }
-
 }
