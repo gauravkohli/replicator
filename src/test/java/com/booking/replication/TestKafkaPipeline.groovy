@@ -1,8 +1,14 @@
-package com.booking.replication;
+package com.booking.replication
 
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import spock.lang.Shared
+import spock.lang.Specification
+import spock.lang.Unroll
 
 @GrabConfig(systemClassLoader = true)
 import groovy.sql.Sql
@@ -22,15 +28,17 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.PartitionInfo;
-import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.TopicPartition
+
+import static org.junit.Assert.assertTrue;
 
 class TestKafkaPipeline {
 
     private static final Logger logger = LoggerFactory.getLogger(TestKafkaPipeline.class);
 
-    private class Pipeline {
+    public class Pipeline {
 
-        public  Network network;
+        public Network network;
 
         public GenericContainer mysql;
         public GenericContainer zookeeper;
@@ -49,15 +57,15 @@ class TestKafkaPipeline {
                     .withNetwork(network)
                     .withNetworkAliases("mysql")
                     .withClasspathResourceMapping(
-                        "my.cnf",
-                        "/etc/mysql/conf.d/my.cnf",
-                        BindMode.READ_ONLY
-                    )
+                    "my.cnf",
+                    "/etc/mysql/conf.d/my.cnf",
+                    BindMode.READ_ONLY
+            )
                     .withClasspathResourceMapping(
-                        "mysql_init_dbs.sh",
-                        "/docker-entrypoint-initdb.d/mysql_init_dbs.sh",
-                        BindMode.READ_ONLY
-                    )
+                    "mysql_init_dbs.sh",
+                    "/docker-entrypoint-initdb.d/mysql_init_dbs.sh",
+                    BindMode.READ_ONLY
+            )
                     .withEnv("MYSQL_ROOT_PASSWORD", "mysqlPass")
                     .withExposedPorts(3306)
             ;
@@ -86,10 +94,10 @@ class TestKafkaPipeline {
                     .withNetwork(network)
                     .withNetworkAliases("replicator")
                     .withClasspathResourceMapping(
-                        "replicator-conf.yaml",
-                        "/replicator/replicator-conf.yaml",
-                        BindMode.READ_ONLY
-                    )
+                    "replicator-conf.yaml",
+                    "/replicator/replicator-conf.yaml",
+                    BindMode.READ_ONLY
+            )
             ;
 
         }
@@ -154,7 +162,7 @@ class TestKafkaPipeline {
             return graphite.getMappedPort(80);
         }
 
-        private static Properties getKafkaConsumerProperties(String broker) {
+        public static Properties getKafkaConsumerProperties(String broker) {
             // Consumer configuration
             Properties prop = new Properties();
             prop.put("bootstrap.servers", broker);
@@ -167,7 +175,7 @@ class TestKafkaPipeline {
             return prop;
         }
 
-        private String getKafkaMessages() {
+        public List<List<String>> readRowsFromKafka() {
 
             def result = kafka.execInContainer(
                     "/opt/kafka/bin/kafka-console-consumer.sh",
@@ -180,10 +188,28 @@ class TestKafkaPipeline {
 
             def messages = result.getStdout()
 
-            return messages;
+            def jsonSlurper = new JsonSlurper()
+
+            def messageEntries = jsonSlurper.parseText(messages)
+
+            def inserts =
+                    messageEntries['rows'].findAll {
+                        it["eventType"] == "INSERT"
+                    }
+
+            def rows = inserts.collect {
+                [
+                        it["eventColumns"]["pk_part_1"]["value"],
+                        it["eventColumns"]["pk_part_2"]["value"],
+                        it["eventColumns"]["randomint"]["value"],
+                        it["eventColumns"]["randomvarchar"]["value"]
+                ]
+            }
+
+            return rows;
         }
 
-        private void InsertTestRowsToMySQL() {
+        public void InsertTestRowsToMySQL() {
 
             def urlReplicant = 'jdbc:mysql://' + this.getMySqlIP() + ":" + this.getMySqlPort() + '/test'
             def urlActiveSchema = 'jdbc:mysql://' + this.getMySqlIP() + ":" + this.getMySqlPort() + '/test_active_schema'
@@ -295,22 +321,20 @@ class TestKafkaPipeline {
             replicant.close()
             activeSchema.close()
         }
-
-
     }
+}
 
-    @Test
-    public void testMySQL2KafkaPipeline() throws InterruptedException {
+class PipelineTestsSpec extends Specification {
 
-        Pipeline pipeline = new Pipeline();
+    @Shared  pipeline = new TestKafkaPipeline.Pipeline();
+
+    @Unroll
+    def "pipelineTransmitRows{#result == #expected}"()  {
+
+        TestKafkaPipeline.Pipeline
         pipeline.start();
 
-        logger.info("Pipeline started");
-        logger.info("MySQL is exposed at " + pipeline.getMySqlIP() + ":" + pipeline.getMySqlPort());
-        logger.info("Graphite is exposed at " + pipeline.getGraphitelIP() + ":" + pipeline.getGraphitePort());
-
-
-        Thread.sleep(10000);
+        Thread.sleep(5000);
 
         // ====================================================================
         // Insert test rows to MySQL
@@ -318,85 +342,32 @@ class TestKafkaPipeline {
 
         // ====================================================================
         // Start replication
-
         def replicatorCmdHandle = pipeline.startReplication()
-
-        logger.info("started replication to Kafka")
+        Thread.sleep(1000);
 
         // ====================================================================
-        // Read from Kafka and compare
+        // Read from Kafka, shutdown and compare
 
-        Thread.sleep(10000);
-
-        def kafkaMessages = pipeline.getKafkaMessages()
-
-//        final int POLL_TIME_OUT = 1000;
-//        def topicName = "replicator_test_kafka"
-//
-//        def brokerAddress = pipeline.getKafkaIP() + ":" + pipeline.getKafkaPort()
-//
-//        logger.info("kafka broker: " + brokerAddress)
-//
-//
-//
-//        Thread.sleep(10000000);
-//
+        def realResults = pipeline.readRowsFromKafka()
 
         pipeline.shutdown()
         replicatorCmdHandle.join();
 
-        logger.info("replication stopped")
+        expect:
+        result == expected
 
-        Thread.sleep(3000);
-
-        logger.info("kafkaMessages " + kafkaMessages)
-
-
-
-//        def consumer = new KafkaConsumer<>(Pipeline.getKafkaConsumerProperties(brokerAddress));
-
-//        for (PartitionInfo pi: consumer.partitionsFor(topicName)) {
-//            logger.info("{ topic => "
-//                    + pi.topic().toString()
-//                    + ", partition => "
-//                    + pi.toString()
-//                    + " }"
-//            )
-//        }
-
-//        for (PartitionInfo pi: consumer.partitionsFor(topicName)) {
-//
-//            logger.info("{ topic => "
-//                    + pi.topic().toString()
-//                    + ", partition => "
-//                    + pi.toString()
-//                    + " }"
-//            )
-//
-//            TopicPartition partition = new TopicPartition(topicName, pi.partition());
-//
-//            consumer.assign(Collections.singletonList(partition));
-//            consumer.seek(partition,1);
-//
-//            logger.info("Position: " + String.valueOf(consumer.position(partition)));
-//
-//            int count = 0;
-//
-//            while (true) {
-//                count ++;
-//                ConsumerRecords<String, String> records = consumer.poll(POLL_TIME_OUT);
-//                for (ConsumerRecord<String, String> record : records) {
-//                    logger.info("Message no: ${count}")
-//                    logger.info(
-//                            "offset = ${record.offset()}, key = ${record.key()}, value = ${record.value()}"
-//                    );
-//
-//                    if(count == 5) {
-//                        break;
-//                    }
-//                }
-//            }
-//        }
-
+        where:
+        result << realResults.collect{
+            it[0] + "|" +
+            it[1] + "|" +
+            it[2] + "|" +
+            it[3]
+        }
+        expected << [
+                "tNMeE|686140|665726|PZBAAQSVoSxxFassEAQ",
+                "QrTSd|1049668|49070|cvjIXQiWLegvLs kXaKH",
+                "xzbTw|4484536|437616|pjFNkiZExAiHkKiJePMp",
+                "CIael|2872792|978231|RWURqZcnAGwQfRSisYcr"
+        ]
     }
 }

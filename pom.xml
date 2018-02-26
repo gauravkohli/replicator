@@ -253,6 +253,7 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-json</artifactId>
             <version>2.4.13</version>
+            <scope>test</scope>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.codehaus.groovy/groovy-sql -->
@@ -260,6 +261,7 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-sql</artifactId>
             <version>2.0.1</version>
+            <scope>test</scope>
         </dependency>
 
         <dependency>
@@ -273,12 +275,7 @@
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers</artifactId>
                 <version>1.6.0</version>
-            </dependency>
-            <!-- https://mvnrepository.com/artifact/redis.clients/jedis -->
-            <dependency>
-                <groupId>redis.clients</groupId>
-                <artifactId>jedis</artifactId>
-                <version>2.9.0</version>
+                <scope>test</scope>
             </dependency>
             <!-- https://mvnrepository.com/artifact/org.testcontainers/mysql -->
             <dependency>
@@ -286,18 +283,6 @@
                 <artifactId>mysql</artifactId>
                 <version>1.6.0</version>
                 <scope>test</scope>
-            </dependency>
-            <!-- https://mvnrepository.com/artifact/com.zaxxer/HikariCP -->
-            <dependency>
-                <groupId>com.zaxxer</groupId>
-                <artifactId>HikariCP</artifactId>
-                <version>2.7.7</version>
-            </dependency>
-            <dependency>
-                <groupId>org.projectlombok</groupId>
-                <artifactId>lombok</artifactId>
-                <version>1.16.16</version>
-                <scope>provided</scope>
             </dependency>
     </dependencies>
     <profiles>
