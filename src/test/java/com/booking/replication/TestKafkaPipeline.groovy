@@ -5,7 +5,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @GrabConfig(systemClassLoader = true)
-import groovy.sql.Sql;
+import groovy.sql.Sql
+import org.testcontainers.containers.output.OutputFrame
+import org.testcontainers.containers.output.ToStringConsumer
+import org.testcontainers.containers.output.WaitingConsumer
+import org.testcontainers.shaded.io.netty.util.internal.shaded.org.jctools.queues.MessagePassingQueue
+
+import java.util.concurrent.TimeUnit;
+
 import static groovy.json.JsonOutput.*
 
 import org.testcontainers.containers.*;
@@ -117,7 +124,7 @@ class TestKafkaPipeline {
         public void shutdown() {
             replicator.stop();
             graphite.stop();
-            kafka.start();
+            kafka.stop();
             zookeeper.stop();
             mysql.stop();
         }
@@ -158,6 +165,22 @@ class TestKafkaPipeline {
             prop.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
             prop.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
             return prop;
+        }
+
+        private String getKafkaMessages() {
+
+            def result = kafka.execInContainer(
+                    "/opt/kafka/bin/kafka-console-consumer.sh",
+                    "--new-consumer",
+                    "--bootstrap-server", "localhost:9092",
+                    "--topic", "replicator_test_kafka",
+                    "--timeout-ms", "5000",
+                    "--from-beginning"
+            )
+
+            def messages = result.getStdout()
+
+            return messages;
         }
 
         private void InsertTestRowsToMySQL() {
@@ -272,6 +295,8 @@ class TestKafkaPipeline {
             replicant.close()
             activeSchema.close()
         }
+
+
     }
 
     @Test
@@ -284,35 +309,51 @@ class TestKafkaPipeline {
         logger.info("MySQL is exposed at " + pipeline.getMySqlIP() + ":" + pipeline.getMySqlPort());
         logger.info("Graphite is exposed at " + pipeline.getGraphitelIP() + ":" + pipeline.getGraphitePort());
 
+
+        Thread.sleep(10000);
+
         // ====================================================================
         // Insert test rows to MySQL
         pipeline.InsertTestRowsToMySQL()
 
         // ====================================================================
         // Start replication
-        def replicatorHandle = pipeline.startReplication()
+
+        def replicatorCmdHandle = pipeline.startReplication()
 
         logger.info("started replication to Kafka")
 
         // ====================================================================
         // Read from Kafka and compare
-        final int POLL_TIME_OUT = 1000;
-        def topicName = "replicator_test_kafka"
 
-        def brokerAddress = pipeline.getKafkaIP() + ":" + pipeline.getKafkaPort()
+        Thread.sleep(10000);
 
-        logger.info("kafka broker: " + brokerAddress)
+        def kafkaMessages = pipeline.getKafkaMessages()
 
+//        final int POLL_TIME_OUT = 1000;
+//        def topicName = "replicator_test_kafka"
+//
+//        def brokerAddress = pipeline.getKafkaIP() + ":" + pipeline.getKafkaPort()
+//
+//        logger.info("kafka broker: " + brokerAddress)
+//
+//
+//
+//        Thread.sleep(10000000);
+//
 
-        Thread.sleep(1000);
-
-        pipeline.replicator.stop();
-
-        replicatorHandle.join();
+        pipeline.shutdown()
+        replicatorCmdHandle.join();
 
         logger.info("replication stopped")
 
-        def consumer = new KafkaConsumer<>(Pipeline.getKafkaConsumerProperties(brokerAddress));
+        Thread.sleep(3000);
+
+        logger.info("kafkaMessages " + kafkaMessages)
+
+
+
+//        def consumer = new KafkaConsumer<>(Pipeline.getKafkaConsumerProperties(brokerAddress));
 
 //        for (PartitionInfo pi: consumer.partitionsFor(topicName)) {
 //            logger.info("{ topic => "
@@ -323,40 +364,39 @@ class TestKafkaPipeline {
 //            )
 //        }
 
-        for (PartitionInfo pi: consumer.partitionsFor(topicName)) {
+//        for (PartitionInfo pi: consumer.partitionsFor(topicName)) {
+//
+//            logger.info("{ topic => "
+//                    + pi.topic().toString()
+//                    + ", partition => "
+//                    + pi.toString()
+//                    + " }"
+//            )
+//
+//            TopicPartition partition = new TopicPartition(topicName, pi.partition());
+//
+//            consumer.assign(Collections.singletonList(partition));
+//            consumer.seek(partition,1);
+//
+//            logger.info("Position: " + String.valueOf(consumer.position(partition)));
+//
+//            int count = 0;
+//
+//            while (true) {
+//                count ++;
+//                ConsumerRecords<String, String> records = consumer.poll(POLL_TIME_OUT);
+//                for (ConsumerRecord<String, String> record : records) {
+//                    logger.info("Message no: ${count}")
+//                    logger.info(
+//                            "offset = ${record.offset()}, key = ${record.key()}, value = ${record.value()}"
+//                    );
+//
+//                    if(count == 5) {
+//                        break;
+//                    }
+//                }
+//            }
+//        }
 
-            logger.info("{ topic => "
-                    + pi.topic().toString()
-                    + ", partition => "
-                    + pi.toString()
-                    + " }"
-            )
-
-            TopicPartition partition = new TopicPartition(topicName, pi.partition());
-
-            consumer.assign(Collections.singletonList(partition));
-            consumer.seek(partition,1);
-
-            logger.info("Position: " + String.valueOf(consumer.position(partition)));
-
-            int count = 0;
-
-            while (true) {
-                count ++;
-                ConsumerRecords<String, String> records = consumer.poll(POLL_TIME_OUT);
-                for (ConsumerRecord<String, String> record : records) {
-                    logger.info("Message no: ${count}")
-                    logger.info(
-                            "offset = ${record.offset()}, key = ${record.key()}, value = ${record.value()}"
-                    );
-
-                    if(count == 5) {
-                        break;
-                    }
-                }
-            }
-        }
-
-        Thread.sleep(1000000);
     }
 }
