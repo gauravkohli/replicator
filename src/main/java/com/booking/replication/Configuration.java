@@ -86,6 +86,14 @@ public class Configuration {
     }
 
     @JsonDeserialize
+    @JsonProperty("converter")
+    private ConverterConfiguration converterConfiguration = new ConverterConfiguration();
+
+    private static class ConverterConfiguration {
+        public boolean stringify_json_null = true;
+    }
+
+    @JsonDeserialize
     @JsonProperty("hbase")
     private HBaseConfiguration hbaseConfiguration;
 
@@ -604,6 +612,14 @@ public class Configuration {
     public boolean getHBaseApplyUuid(){
         return hbaseConfiguration.apply_uuid;
     }
+
+    /**
+     * Converter configuration getters.
+     */
+    public boolean getConverterStringifyJsonNull(){
+        return converterConfiguration.stringify_json_null;
+    }
+
     /**
      * Augmenter configuration getters.
      */
