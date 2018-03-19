@@ -376,7 +376,7 @@ public class PipelineOrchestrator extends Thread {
                 return event;
 
             } else {
-                LOGGER.info("Pipeline report: no items in producer event rawQueue. Will sleep for " + QUEUE_POLL_SLEEP + " and check again.");
+                LOGGER.debug("Pipeline report: no items in producer event rawQueue. Will sleep for " + QUEUE_POLL_SLEEP + " and check again.");
                 Thread.sleep(sleep);
                 long currentTime = System.currentTimeMillis();
                 long timeDiff = currentTime - timeOfLastEvent;
@@ -784,7 +784,8 @@ public class PipelineOrchestrator extends Thread {
     }
 
     private boolean isTransactionSizeLimitExceeded() {
-        return configuration.getOrchestratorConfiguration().isRewindingEnabled() && (currentTransaction.getEventsCounter() > orchestratorConfiguration.getRewindingThreshold());
+        return configuration.getOrchestratorConfiguration().isRewindingEnabled()
+                && (currentTransaction.getEventsCounter() > orchestratorConfiguration.getRewindingThreshold());
     }
 
     private void doTimestampOverride(BinlogEventV4 event) {
