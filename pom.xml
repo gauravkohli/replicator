@@ -39,7 +39,8 @@
         <module>mysql-replicator-augmenter</module>
         <module>mysql-replicator-applier</module>
         <module>mysql-replicator</module>
-  </modules>
+        <module>mysql-replicator-flusher</module>
+    </modules>
     <dependencyManagement>
         <dependencies>
             <dependency>
